@@ -22,9 +22,6 @@ android {
     ndkVersion '25.2.9519653'
     
     defaultConfig {
-        shaders {
-            glslcArgs.addAll(['-c'])
-        }
         applicationId 'com.android.hellovk'
         minSdk 30
         targetSdk 33
@@ -60,6 +57,35 @@ android {
 
     kotlinOptions {
         jvmTarget = '1.8'
+    }
+
+    Properties properties = new Properties()
+    properties.load(project.rootProject.file('local.properties').newDataInputStream())
+    def vulkanSdkDir = properties.getProperty('vulkansdk.dir')
+
+    task prepareAssetDir {
+        doLast {
+            mkdir "${buildDir}/assets/shaders"
+        }
+    }
+    
+    // Compile HLSL shaders to SPIR-V with DXC.
+    task compileFragShader(type: Exec, dependsOn: prepareAssetDir) {
+        commandLine "${vulkanSdkDir}/bin/dxc", '-T', 'vs_6_6', '-spirv', "${projectDir}/src/main/shaders/shader.vert.hlsl", '-Fo', "${buildDir}/assets/shaders/shader.vert.spv"
+    }
+    task compileVertShader(type: Exec, dependsOn: prepareAssetDir) {
+        commandLine "${vulkanSdkDir}/bin/dxc", '-T', 'ps_6_6', '-spirv', "${projectDir}/src/main/shaders/shader.frag.hlsl", '-Fo', "${buildDir}/assets/shaders/shader.frag.spv"
+    }
+
+    // Add shader directory to asset manager.
+    sourceSets.main.assets.srcDirs += new File("${buildDir}/assets")
+
+    // Compile shaders before packaging assets.
+    android.applicationVariants.all { variant ->
+        variant.mergeAssetsProvider.configure {
+            dependsOn compileFragShader
+            dependsOn compileVertShader
+        }
     }
 }
 
